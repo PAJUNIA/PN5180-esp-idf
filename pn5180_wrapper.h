@@ -29,7 +29,12 @@ bool     pn5180_switch_to_lpcd(uint16_t wakeup_counter_ms);
 bool     pn5180_setup_rf(void);
 bool     pn5180_set_rf_off(void);
 uint8_t  pn5180_activate_type_a(uint8_t *buffer, uint8_t kind);
+bool     pn5180_is_card_present(void);
+uint8_t  pn5180_read_card_serial(uint8_t *buffer);
 bool     pn5180_mifare_halt(void);
+void     pn5180_iso15693_reset(void);
+bool     pn5180_iso15693_setup_rf(void);
+int      pn5180_iso15693_get_inventory(uint8_t *uid);
 
 #ifdef __cplusplus
 }

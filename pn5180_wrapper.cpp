@@ -1,6 +1,7 @@
 #include "pn5180_wrapper.h"
 #include "Arduino.h"
 #include "PN5180ISO14443.h"
+#include "PN5180ISO15693.h"
 
 // --- Pins (identiques au sketch.ino) ---
 #define PN_NSS   5
@@ -15,8 +16,11 @@ SPIClass SPI;
 spi_device_handle_t global_nfc_spi;
 
 static PN5180ISO14443 *nfc = nullptr;
+static PN5180ISO15693 *nfc15693 = nullptr;
 
 bool pn5180_init_spi(void) {
+    constexpr spi_host_device_t pn5180_spi_host = SPI3_HOST;
+
     spi_bus_config_t buscfg = {};
     buscfg.miso_io_num     = PN_MISO;
     buscfg.mosi_io_num     = PN_MOSI;
@@ -25,7 +29,7 @@ bool pn5180_init_spi(void) {
     buscfg.quadhd_io_num   = -1;
     buscfg.max_transfer_sz = 4096;
 
-    if (spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO) != ESP_OK) return false;
+    if (spi_bus_initialize(pn5180_spi_host, &buscfg, SPI_DMA_CH_AUTO) != ESP_OK) return false;
 
     spi_device_interface_config_t devcfg = {};
     devcfg.clock_speed_hz = 5000000;
@@ -33,16 +37,18 @@ bool pn5180_init_spi(void) {
     devcfg.spics_io_num   = -1;
     devcfg.queue_size     = 1;
 
-    if (spi_bus_add_device(SPI2_HOST, &devcfg, &global_nfc_spi) != ESP_OK) return false;
+    if (spi_bus_add_device(pn5180_spi_host, &devcfg, &global_nfc_spi) != ESP_OK) return false;
 
     pinMode(PN_IRQ, INPUT);
 
     nfc = new PN5180ISO14443(PN_NSS, PN_BUSY, PN_RST);
+    nfc15693 = new PN5180ISO15693(PN_NSS, PN_BUSY, PN_RST);
     return true;
 }
 
 void pn5180_begin(void) {
     if (nfc) nfc->begin();
+    if (nfc15693) nfc15693->begin();
 }
 
 void pn5180_reset(void) {
@@ -94,7 +100,31 @@ uint8_t pn5180_activate_type_a(uint8_t *buffer, uint8_t kind) {
     return nfc->activateTypeA(buffer, kind);
 }
 
+bool pn5180_is_card_present(void) {
+    if (!nfc) return false;
+    return nfc->isCardPresent();
+}
+
+uint8_t pn5180_read_card_serial(uint8_t *buffer) {
+    if (!nfc) return 0;
+    return nfc->readCardSerial(buffer);
+}
+
 bool pn5180_mifare_halt(void) {
     if (!nfc) return false;
     return nfc->mifareHalt();
+}
+
+void pn5180_iso15693_reset(void) {
+    if (nfc15693) nfc15693->reset();
+}
+
+bool pn5180_iso15693_setup_rf(void) {
+    if (!nfc15693) return false;
+    return nfc15693->setupRF();
+}
+
+int pn5180_iso15693_get_inventory(uint8_t *uid) {
+    if (!nfc15693) return -2;
+    return static_cast<int>(nfc15693->getInventory(uid));
 }

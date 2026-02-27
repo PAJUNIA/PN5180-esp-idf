@@ -28,6 +28,7 @@ public:
   
 private:
   uint16_t rxBytesReceived();
+  bool waitForRxReady(const char *step);
 public:
   // Mifare TypeA
   uint8_t activateTypeA(uint8_t *buffer, uint8_t kind);

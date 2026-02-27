@@ -80,7 +80,9 @@ typedef uint8_t byte;
 #define MSBFIRST 1
 
 // --- Gestion du Temps ---
-#define delay(ms) vTaskDelay(pdMS_TO_TICKS(ms))
+inline void delay(uint32_t ms) {
+    esp_rom_delay_us(ms * 1000);
+}
 inline void delayMicroseconds(uint32_t us) {
     esp_rom_delay_us(us);
 }
