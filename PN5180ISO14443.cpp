@@ -25,6 +25,7 @@
 #include "Debug.h"
 
 static const char *TAG_ISO14443 = "PN5180_ISO14443";
+static constexpr bool kIso14443DiagLogs = false;
 
 static void dump_activate_diag(PN5180ISO14443 *nfc, const char *step) {
   uint32_t irqStatus = nfc->getIRQStatus();
@@ -34,14 +35,16 @@ static void dump_activate_diag(PN5180ISO14443 *nfc, const char *step) {
   nfc->readRegister(RX_STATUS, &rxStatus);
   nfc->readRegister(RF_STATUS, &rfStatus);
   nfc->readRegister(SYSTEM_STATUS, &systemStatus);
-  ESP_LOGW(TAG_ISO14443,
-           "%s failed: IRQ=0x%08" PRIx32 " RX=0x%08" PRIx32 " RF=0x%08" PRIx32 " SYS=0x%08" PRIx32 " TS=%d",
-           step,
-           irqStatus,
-           rxStatus,
-           rfStatus,
-           systemStatus,
-           (int)nfc->getTransceiveState());
+  if (kIso14443DiagLogs) {
+    ESP_LOGW(TAG_ISO14443,
+             "%s failed: IRQ=0x%08" PRIx32 " RX=0x%08" PRIx32 " RF=0x%08" PRIx32 " SYS=0x%08" PRIx32 " TS=%d",
+             step,
+             irqStatus,
+             rxStatus,
+             rfStatus,
+             systemStatus,
+             (int)nfc->getTransceiveState());
+  }
 }
 
 static bool fallback_uid_from_cl1(const uint8_t *anticolData, uint8_t *buffer, uint8_t *uidLength) {
@@ -70,15 +73,17 @@ static bool fallback_uid_from_cl1(const uint8_t *anticolData, uint8_t *buffer, u
 
 static void log_cl1_data(const uint8_t *anticolData, uint8_t sak) {
   const uint8_t bcc_calc = anticolData[0] ^ anticolData[1] ^ anticolData[2] ^ anticolData[3];
-  ESP_LOGW(TAG_ISO14443,
-           "CL1 data uid/bcc=%02X:%02X:%02X:%02X:%02X bcc_calc=%02X sak=%02X",
-           anticolData[0],
-           anticolData[1],
-           anticolData[2],
-           anticolData[3],
-           anticolData[4],
-           bcc_calc,
-           sak);
+  if (kIso14443DiagLogs) {
+    ESP_LOGW(TAG_ISO14443,
+             "CL1 data uid/bcc=%02X:%02X:%02X:%02X:%02X bcc_calc=%02X sak=%02X",
+             anticolData[0],
+             anticolData[1],
+             anticolData[2],
+             anticolData[3],
+             anticolData[4],
+             bcc_calc,
+             sak);
+  }
 }
 
 PN5180ISO14443::PN5180ISO14443(uint8_t SSpin, uint8_t BUSYpin, uint8_t RSTpin) 
@@ -209,7 +214,7 @@ uint8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 			cmd[1] = 0x70;
 			if (!sendData(cmd, 7, 0x00)) {
 			  if (fallback_uid_from_cl1(cmd + 2, buffer, &uidLength)) {
-			    ESP_LOGW(TAG_ISO14443, "select CL1 failed, returning UID from anticollision only");
+			    if (kIso14443DiagLogs) ESP_LOGW(TAG_ISO14443, "select CL1 failed, returning UID from anticollision only");
 			    return uidLength;
 			  }
 			  dump_activate_diag(this, "send select CL1");
@@ -217,7 +222,7 @@ uint8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 			}
 			if (!waitForRxReady("wait SAK CL1")) {
 			  if (fallback_uid_from_cl1(cmd + 2, buffer, &uidLength)) {
-			    ESP_LOGW(TAG_ISO14443, "SAK wait failed, returning UID from anticollision only");
+			    if (kIso14443DiagLogs) ESP_LOGW(TAG_ISO14443, "SAK wait failed, returning UID from anticollision only");
 			    return uidLength;
 			  }
 			  return 0;
@@ -225,7 +230,7 @@ uint8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 			//Read 1 byte SAK into buffer[2]
 			if (!readData(1, buffer+2)) {
 			  if (fallback_uid_from_cl1(cmd + 2, buffer, &uidLength)) {
-			    ESP_LOGW(TAG_ISO14443, "SAK read failed, returning UID from anticollision only");
+			    if (kIso14443DiagLogs) ESP_LOGW(TAG_ISO14443, "SAK read failed, returning UID from anticollision only");
 			    return uidLength;
 			  }
 			  dump_activate_diag(this, "read SAK CL1");
@@ -243,7 +248,7 @@ uint8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 				// Take First 3 bytes of UID, Ignore first byte 88(CT)
 				if (cmd[2] != 0x88) {
 				  if (fallback_uid_from_cl1(cmd + 2, buffer, &uidLength)) {
-				    ESP_LOGW(TAG_ISO14443, "cascade bit set but CL1 looks like 4-byte UID, returning fallback UID");
+				    if (kIso14443DiagLogs) ESP_LOGW(TAG_ISO14443, "cascade bit set but CL1 looks like 4-byte UID, returning fallback UID");
 				    return uidLength;
 				  }
 				  dump_activate_diag(this, "cascade tag check");

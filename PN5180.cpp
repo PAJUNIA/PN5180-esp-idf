@@ -25,6 +25,7 @@
 #include "Debug.h"
 
 static const char *TAG_PN5180 = "PN5180";
+static constexpr bool kPn5180DiagLogs = false;
 
 // PN5180 1-Byte Direct Commands
 // see 11.4.3.3 Host Interface Command List
@@ -324,7 +325,7 @@ bool PN5180::sendData(uint8_t *data, int len, uint8_t validBits) {
   PN5180TransceiveStat transceiveState = getTransceiveState();
   if (PN5180_TS_WaitTransmit != transceiveState) {
     PN5180DEBUG(F("*** ERROR: Transceiver not in state WaitTransmit!?\n"));
-    ESP_LOGW(TAG_PN5180, "sendData rejected: TS=%d IRQ=0x%08" PRIx32, (int)transceiveState, getIRQStatus());
+    if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "sendData rejected: TS=%d IRQ=0x%08" PRIx32, (int)transceiveState, getIRQStatus());
     return false;
   }
 
@@ -545,7 +546,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   unsigned long startedWaiting = millis();
   while (LOW != digitalRead(PN5180_BUSY)) {
     if (millis() - startedWaiting > commandTimeout) {
-      ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low before TX: len=%u", (unsigned)sendBufferLen);
+      if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low before TX: len=%u", (unsigned)sendBufferLen);
       return false;
     }
     delay(1);
@@ -554,7 +555,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   digitalWrite(PN5180_NSS, LOW); delay(2);
   // 2.
   if (!pn5180_spi_frame_exchange(sendBuffer, nullptr, sendBufferLen)) {
-    ESP_LOGW(TAG_PN5180, "SPI TX frame exchange failed: len=%u", (unsigned)sendBufferLen);
+    if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "SPI TX frame exchange failed: len=%u", (unsigned)sendBufferLen);
     digitalWrite(PN5180_NSS, HIGH);
     return false;
   }
@@ -562,7 +563,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   startedWaiting = millis();
   while (HIGH != digitalRead(PN5180_BUSY)) {
     if (millis() - startedWaiting > commandTimeout) {
-      ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY high after TX: len=%u", (unsigned)sendBufferLen);
+      if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY high after TX: len=%u", (unsigned)sendBufferLen);
       return false;
     }
     delay(1);
@@ -573,7 +574,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   startedWaiting = millis();
   while (LOW != digitalRead(PN5180_BUSY)) {
     if (millis() - startedWaiting > commandTimeout) {
-      ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low after TX latch: len=%u", (unsigned)sendBufferLen);
+      if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low after TX latch: len=%u", (unsigned)sendBufferLen);
       return false;
     }
     delay(1);
@@ -589,13 +590,13 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   // 2.
   uint8_t *dummyTx = (uint8_t *)malloc(recvBufferLen);
   if (!dummyTx) {
-    ESP_LOGW(TAG_PN5180, "malloc failed for RX frame: len=%u", (unsigned)recvBufferLen);
+    if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "malloc failed for RX frame: len=%u", (unsigned)recvBufferLen);
     digitalWrite(PN5180_NSS, HIGH);
     return false;
   }
   memset(dummyTx, 0xFF, recvBufferLen);
   if (!pn5180_spi_frame_exchange(dummyTx, recvBuffer, recvBufferLen)) {
-    ESP_LOGW(TAG_PN5180, "SPI RX frame exchange failed: len=%u", (unsigned)recvBufferLen);
+    if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "SPI RX frame exchange failed: len=%u", (unsigned)recvBufferLen);
     free(dummyTx);
     digitalWrite(PN5180_NSS, HIGH);
     return false;
@@ -605,7 +606,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   startedWaiting = millis();
   while (HIGH != digitalRead(PN5180_BUSY)) {
     if (millis() - startedWaiting > commandTimeout) {
-      ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY high after RX: len=%u", (unsigned)recvBufferLen);
+      if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY high after RX: len=%u", (unsigned)recvBufferLen);
       return false;
     }
     delay(1);
@@ -616,7 +617,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   startedWaiting = millis();
   while (LOW != digitalRead(PN5180_BUSY)) {
     if (millis() - startedWaiting > commandTimeout) {
-      ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low after RX latch: len=%u", (unsigned)recvBufferLen);
+      if (kPn5180DiagLogs) ESP_LOGW(TAG_PN5180, "Timeout waiting BUSY low after RX latch: len=%u", (unsigned)recvBufferLen);
       return false;
     }
     delay(1);
