@@ -25,7 +25,7 @@
 #include "Debug.h"
 
 static const char *TAG_PN5180 = "PN5180";
-static constexpr bool kPn5180DiagLogs = false;
+static constexpr bool kPn5180DiagLogs = true;
 
 // PN5180 1-Byte Direct Commands
 // see 11.4.3.3 Host Interface Command List
@@ -398,15 +398,72 @@ bool PN5180::readData(uint8_t len, uint8_t *buffer) {
  * max. wake-up time is 2960 ms.
  */
 bool PN5180::switchToLPCD(uint16_t wakeupCounterInMs) {
+  uint8_t lpcdRefCtrl[1] = {0};
+  uint32_t rfStatusBefore = 0;
+  uint32_t systemStatusBefore = 0;
+
+  if (!readEEprom(0x38, lpcdRefCtrl, 1)) return false;
+  readRegister(RF_STATUS, &rfStatusBefore);
+  readRegister(SYSTEM_STATUS, &systemStatusBefore);
+  if (kPn5180DiagLogs) {
+    ESP_LOGW(TAG_PN5180,
+             "switchToLPCD start: RF=0x%08" PRIx32 " SYS=0x%08" PRIx32 " refCtrl=0x%02X",
+             rfStatusBefore,
+             systemStatusBefore,
+             lpcdRefCtrl[0]);
+  }
+
+  // Ensure the RF field is off before entering LPCD.
+  setRF_off();
+  delay(5);
+  clearIRQStatus(0xffffffff);
+
+  // Setup AGC_REF_CONFIG based on LPCD mode
+  uint32_t agcRefConfig = 0;
+  if (!readRegister(AGC_REF_CONFIG, &agcRefConfig)) return false;
+
+  if ((lpcdRefCtrl[0] & 0x03U) == 0x01U) {
+    // Self-calibration mode: NXP requires read followed by write-back
+    if (!clearIRQStatus(0xffffffff)) return false;
+    if (!writeRegister(AGC_REF_CONFIG, agcRefConfig)) return false;
+    if (kPn5180DiagLogs) {
+      ESP_LOGW(TAG_PN5180, "LPCD self-calib mode: AGC_REF=0x%08" PRIx32, agcRefConfig);
+    }
+  } else if ((lpcdRefCtrl[0] & 0x03U) == 0x00U) {
+    // Fixed reference mode: use current AGC as baseline
+    if (!writeRegister(AGC_REF_CONFIG, agcRefConfig)) return false;
+    if (kPn5180DiagLogs) {
+      ESP_LOGW(TAG_PN5180, "LPCD fixed-ref mode: AGC_REF=0x%08" PRIx32, agcRefConfig);
+    }
+  }
+
   // clear all IRQ flags
   if (!clearIRQStatus(0xffffffff)) return false;
   // enable only LPCD and general error IRQ
-  if (!writeRegister(IRQ_ENABLE, LPCD_IRQ_STAT | GENERAL_ERROR_IRQ_STAT)) return false;
+  uint32_t irqEnableMask = LPCD_IRQ_STAT | GENERAL_ERROR_IRQ_STAT;
+  if (!writeRegister(IRQ_ENABLE, irqEnableMask)) return false;
+  if (kPn5180DiagLogs) {
+    uint32_t irqEnableVerify = 0;
+    readRegister(IRQ_ENABLE, &irqEnableVerify);
+    ESP_LOGW(TAG_PN5180, "IRQ_ENABLE write: req=0x%08" PRIx32 " actual=0x%08" PRIx32, irqEnableMask, irqEnableVerify);
+  }
   // switch mode to LPCD 
   uint8_t cmd[4] = { PN5180_SWITCH_MODE, 0x01, (uint8_t)(wakeupCounterInMs & 0xFF), (uint8_t)((wakeupCounterInMs >> 8U) & 0xFF) };
   SPI.beginTransaction(PN5180_SPI_SETTINGS);
   bool success = transceiveCommand(cmd, sizeof(cmd));
   SPI.endTransaction();
+  if (kPn5180DiagLogs) {
+    uint32_t rfStatusAfter = 0;
+    uint32_t systemStatusAfter = 0;
+    readRegister(RF_STATUS, &rfStatusAfter);
+    readRegister(SYSTEM_STATUS, &systemStatusAfter);
+    ESP_LOGW(TAG_PN5180,
+             "switchToLPCD done: success=%d RF=0x%08" PRIx32 " SYS=0x%08" PRIx32 " IRQ=0x%08" PRIx32,
+             success ? 1 : 0,
+             rfStatusAfter,
+             systemStatusAfter,
+             getIRQStatus());
+  }
   return success;
 }
 
